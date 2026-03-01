@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import json
+import re
 
 @st.cache_resource
 def load_model():
@@ -13,6 +14,15 @@ def load_model():
     return booster, feature_names
 
 booster, ALL_FEATURES = load_model()
+
+def sanitize(name):
+    """Replace characters XGBoost forbids in feature names."""
+    return re.sub(r'[\[\]<>\s]', '_', str(name))
+
+# Sanitized feature names for DMatrix
+CLEAN_FEATURES = [sanitize(f) for f in ALL_FEATURES]
+# Map original → clean for building the input row
+FEATURE_MAP = {orig: clean for orig, clean in zip(ALL_FEATURES, CLEAN_FEATURES)}
 
 st.set_page_config(page_title="Diabetes Readmission Risk", layout="centered")
 st.title("🏥 Diabetes Readmission Risk Prediction")
@@ -50,10 +60,10 @@ age_group = age_risk_group(age)
 
 if st.button("Predict Readmission Risk"):
 
-    # Start every feature as NaN — XGBoost handles missing values natively
-    row = {f: np.nan for f in ALL_FEATURES}
+    # Build row with NaN for every feature (using sanitized names)
+    row = {sanitize(f): np.nan for f in ALL_FEATURES}
 
-    # Map UI inputs to the exact feature names used during training
+    # Known values — keys use sanitized names
     known = {
         "age_midpoint":          float(age_midpoint),
         "time_in_hospital":      float(time_in_hospital),
@@ -72,7 +82,7 @@ if st.button("Predict Readmission Risk"):
         if k in row:
             row[k] = v
 
-    input_df  = pd.DataFrame([row], columns=ALL_FEATURES).astype(float)
+    input_df  = pd.DataFrame([row], columns=CLEAN_FEATURES).astype(float)
     dmat      = xgb.DMatrix(input_df)
     risk_prob = float(booster.predict(dmat)[0])
 
