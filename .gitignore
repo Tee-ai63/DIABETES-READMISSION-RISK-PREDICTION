@@ -1,0 +1,4 @@
+diabetic_data.csv
+*.pkl
+__pycache__/
+.streamlit/
